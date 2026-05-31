@@ -1,3 +1,4 @@
+import { Transform } from 'class-transformer';
 import {
   Column,
   DeleteDateColumn,
@@ -24,8 +25,7 @@ export class Project {
   @Column()
   ownerId: number;
 
-  // Populated on soft-delete; TypeORM automatically excludes rows where
-  // deletedAt IS NOT NULL from all find* queries.
+  @Transform(({ value, options }) => options?.groups?.includes('admin') ? value : undefined)
   @DeleteDateColumn()
   deletedAt: Date | null;
 }

@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Not, Repository } from 'typeorm';
 import { AuditAction, EntityType } from '../audit-log/audit-log.constants';
 import { AuditLogService } from '../audit-log/audit-log.service';
+import { User } from '../users/user.entity';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import { Project } from './project.entity';
@@ -12,10 +13,15 @@ export class ProjectsService {
   constructor(
     @InjectRepository(Project)
     private readonly projectsRepository: Repository<Project>,
+    @InjectRepository(User)
+    private readonly usersRepository: Repository<User>,
     private readonly auditLog: AuditLogService,
   ) {}
 
   async create(dto: CreateProjectDto, ownerId: number, performedBy: number | null = null): Promise<Project> {
+    const owner = await this.usersRepository.findOne({ where: { id: ownerId } });
+    if (!owner) throw new NotFoundException(`User ${ownerId} not found`);
+
     const project = this.projectsRepository.create({ ...dto, ownerId });
     const saved = await this.projectsRepository.save(project);
     this.auditLog.log({ action: AuditAction.CREATE, entityType: EntityType.PROJECT, entityId: saved.id, performedBy });

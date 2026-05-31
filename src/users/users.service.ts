@@ -62,11 +62,7 @@ export class UsersService {
   async update(id: number, updateUserDto: UpdateUserDto, performedBy: number | null = null): Promise<User> {
     const user = await this.findOne(id);
 
-    const { password, ...rest } = updateUserDto;
-    Object.assign(user, rest);
-    if (password !== undefined) {
-      user.password = await bcrypt.hash(password, BCRYPT_ROUNDS);
-    }
+    Object.assign(user, updateUserDto);
 
     const saved = await this.save(user);
     this.auditLog.log({ action: AuditAction.UPDATE, entityType: EntityType.USER, entityId: id, performedBy });

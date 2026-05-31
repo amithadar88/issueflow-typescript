@@ -4,7 +4,8 @@
       "Read(//private/tmp/**)",
       "Bash(npx tsc *)",
       "Bash(npx jest *)",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(npm test *)"
     ]
   }
 }

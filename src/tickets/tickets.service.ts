@@ -59,8 +59,27 @@ export class TicketsService {
   async create(dto: CreateTicketDto, performedBy: number | null = null): Promise<Ticket> {
     const ticket = this.ticketsRepository.create(dto);
     ticket.isOverdue = computeIsOverdue(ticket);
+
+    let autoAssigned = false;
+    if (dto.assigneeId == null) {
+      const assigneeId = await this.pickLeastLoadedDeveloper(dto.projectId);
+      if (assigneeId !== null) {
+        ticket.assigneeId = assigneeId;
+        autoAssigned = true;
+      }
+    }
+
     const saved = await this.ticketsRepository.save(ticket);
     this.auditLog.log({ action: AuditAction.CREATE, entityType: EntityType.TICKET, entityId: saved.id, performedBy });
+    if (autoAssigned) {
+      this.auditLog.log({
+        action: 'AUTO_ASSIGN',
+        entityType: EntityType.TICKET,
+        entityId: saved.id,
+        performedBy: null,
+        actor: AuditActor.SYSTEM,
+      });
+    }
     return saved;
   }
 
@@ -154,34 +173,13 @@ export class TicketsService {
   async autoAssign(ticketId: number): Promise<Ticket> {
     const ticket = await this.findOne(ticketId);
 
-    const developers = await this.usersRepository.find({
-      where: { role: UserRole.DEVELOPER },
-      order: { id: 'ASC' }, // registration order for tie-breaking
-    });
-
-    if (developers.length === 0) {
+    const assigneeId = await this.pickLeastLoadedDeveloper(ticket.projectId);
+    if (assigneeId === null) {
       throw new UnprocessableEntityException('No developers available for assignment');
     }
 
-    const counts = await Promise.all(
-      developers.map(async (dev) => ({
-        dev,
-        count: await this.ticketsRepository.count({
-          where: {
-            assigneeId: dev.id,
-            projectId: ticket.projectId,
-            status: Not(TicketStatus.DONE),
-          },
-        }),
-      })),
-    );
-
-    // Stable sort: primary key is count ASC; secondary is already guaranteed by
-    // the id ASC order from the DB query, so Array.sort stability preserves it.
-    counts.sort((a, b) => a.count - b.count);
-    ticket.assigneeId = counts[0].dev.id;
-
-    const saved = await this.ticketsRepository.save(ticket);
+    ticket.assigneeId = assigneeId;
+    await this.ticketsRepository.save(ticket);
     this.auditLog.log({
       action: 'AUTO_ASSIGN',
       entityType: EntityType.TICKET,
@@ -190,7 +188,28 @@ export class TicketsService {
       actor: AuditActor.SYSTEM,
     });
 
-    return saved;
+    return this.findOne(ticketId);
+  }
+
+  private async pickLeastLoadedDeveloper(projectId: number): Promise<number | null> {
+    const developers = await this.usersRepository.find({
+      where: { role: UserRole.DEVELOPER },
+      order: { id: 'ASC' },
+    });
+
+    if (developers.length === 0) return null;
+
+    const counts = await Promise.all(
+      developers.map(async (dev) => ({
+        devId: dev.id,
+        count: await this.ticketsRepository.count({
+          where: { assigneeId: dev.id, projectId, status: Not(TicketStatus.DONE) },
+        }),
+      })),
+    );
+
+    counts.sort((a, b) => a.count - b.count);
+    return counts[0].devId;
   }
 
   // ── Workload ───────────────────────────────────────────────────────────────

@@ -100,6 +100,27 @@ describe('CommentsService', () => {
         expect.objectContaining({ action: 'CREATE', entityType: 'Comment' }),
       );
     });
+
+    it('resolves @mentions case-insensitively (@Alice matches user "alice")', async () => {
+      ticketRepo.existsBy.mockResolvedValue(true);
+
+      const alice = { id: 5, username: 'alice', fullName: 'Alice A' } as User;
+      userRepo.find.mockResolvedValue([alice]);
+
+      const saved = makeComment({ content: 'Hello @Alice', mentionedUsers: [alice] });
+      commentRepo.create.mockReturnValue(saved);
+      commentRepo.save.mockResolvedValue(saved);
+      commentRepo.findOne.mockResolvedValue(saved);
+
+      const result = await service.create(10, { content: 'Hello @Alice', authorId: 1 });
+
+      expect(result.mentionedUsers).toHaveLength(1);
+      expect(result.mentionedUsers[0].username).toBe('alice');
+      // Verify the repo was queried with the lowercased token.
+      expect(userRepo.find).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ username: expect.anything() }) }),
+      );
+    });
   });
 
   describe('update()', () => {

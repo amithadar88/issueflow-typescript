@@ -91,6 +91,27 @@ describe('TicketsService', () => {
     ticketDeps = module.get(TicketDependenciesService);
   });
 
+  describe('create()', () => {
+    it('creates a ticket without an assignee when no developers are available', async () => {
+      const ticket = makeTicket({ assigneeId: null });
+      ticketRepo.create.mockReturnValue(ticket);
+      ticketRepo.save.mockResolvedValue(ticket);
+      userRepo.find.mockResolvedValue([]); // no developers
+
+      const result = await service.create(
+        { title: 'Fix bug', priority: TicketPriority.MEDIUM, type: TicketType.BUG, projectId: 1 },
+        1,
+      );
+
+      expect(result.assigneeId).toBeNull();
+      // Only CREATE log fires; no AUTO_ASSIGN log.
+      expect(auditLog.log).toHaveBeenCalledTimes(1);
+      expect(auditLog.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'CREATE' }),
+      );
+    });
+  });
+
   describe('findOne()', () => {
     it('returns the ticket when found', async () => {
       const ticket = makeTicket();
@@ -118,8 +139,17 @@ describe('TicketsService', () => {
       expect(auditLog.log).toHaveBeenCalled();
     });
 
-    it('rejects backward status transitions', async () => {
+    it('rejects backward status transitions (IN_REVIEW → TODO)', async () => {
       const ticket = makeTicket({ status: TicketStatus.IN_REVIEW });
+      ticketRepo.findOne.mockResolvedValue(ticket);
+
+      await expect(
+        service.update(1, { status: TicketStatus.TODO }, 1),
+      ).rejects.toThrow(UnprocessableEntityException);
+    });
+
+    it('rejects backward status transitions (IN_PROGRESS → TODO)', async () => {
+      const ticket = makeTicket({ status: TicketStatus.IN_PROGRESS });
       ticketRepo.findOne.mockResolvedValue(ticket);
 
       await expect(
@@ -218,7 +248,10 @@ describe('TicketsService', () => {
   describe('autoAssign()', () => {
     it('assigns the developer with the fewest open tickets in the same project', async () => {
       const ticket = makeTicket({ assigneeId: null, projectId: 3 });
-      ticketRepo.findOne.mockResolvedValue(ticket);
+      // findOne is called twice: once to load the ticket, once to reload after save.
+      ticketRepo.findOne
+        .mockResolvedValueOnce(ticket)
+        .mockResolvedValueOnce({ ...ticket, assigneeId: 11 });
 
       const devA = { id: 10, role: UserRole.DEVELOPER } as User;
       const devB = { id: 11, role: UserRole.DEVELOPER } as User;
@@ -229,7 +262,7 @@ describe('TicketsService', () => {
         .mockResolvedValueOnce(5)
         .mockResolvedValueOnce(2);
 
-      ticketRepo.save.mockResolvedValue({ ...ticket, assigneeId: 11 });
+      ticketRepo.save.mockResolvedValue(ticket);
 
       const result = await service.autoAssign(1);
 
@@ -245,7 +278,9 @@ describe('TicketsService', () => {
 
     it('breaks ties by user id (registration order)', async () => {
       const ticket = makeTicket({ projectId: 1 });
-      ticketRepo.findOne.mockResolvedValue(ticket);
+      ticketRepo.findOne
+        .mockResolvedValueOnce(ticket)
+        .mockResolvedValueOnce({ ...ticket, assigneeId: 5 });
 
       const devA = { id: 5, role: UserRole.DEVELOPER } as User;
       const devB = { id: 9, role: UserRole.DEVELOPER } as User;
@@ -253,7 +288,7 @@ describe('TicketsService', () => {
 
       // Both have 0 open tickets — devA (id=5) wins the tie.
       ticketRepo.count.mockResolvedValue(0);
-      ticketRepo.save.mockResolvedValue({ ...ticket, assigneeId: 5 });
+      ticketRepo.save.mockResolvedValue(ticket);
 
       const result = await service.autoAssign(1);
 
@@ -298,6 +333,7 @@ describe('TicketsService', () => {
 
       ticketRepo.create.mockImplementation((d) => d as Ticket);
       ticketRepo.save.mockResolvedValue(makeTicket({ title: 'Fix login' }));
+      userRepo.find.mockResolvedValue([]); // no developers → auto-assignment skipped
 
       const result = await service.importCsv(csv, 5, 1);
 
@@ -319,6 +355,7 @@ describe('TicketsService', () => {
 
       ticketRepo.create.mockImplementation((d) => d as Ticket);
       ticketRepo.save.mockResolvedValue(makeTicket({ title: 'Good ticket' }));
+      userRepo.find.mockResolvedValue([]); // no developers → auto-assignment skipped
 
       const result = await service.importCsv(csv, 1, 1);
 
@@ -359,6 +396,24 @@ describe('TicketsService', () => {
 
       await service.escalateOverdueTickets();
 
+      expect(ticketRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ priority: TicketPriority.CRITICAL, isOverdue: true }),
+      );
+    });
+
+    it('saves a CRITICAL ticket that is not yet marked overdue (sets isOverdue=true)', async () => {
+      const ticket = makeTicket({
+        priority: TicketPriority.CRITICAL,
+        status: TicketStatus.IN_PROGRESS,
+        dueDate: new Date('2000-01-01'),
+        isOverdue: false, // flag missing even though priority is already CRITICAL
+      });
+      ticketRepo.createQueryBuilder.mockReturnValue(makeQb([ticket]));
+      ticketRepo.save.mockResolvedValue(ticket);
+
+      const count = await service.escalateOverdueTickets();
+
+      expect(count).toBe(1);
       expect(ticketRepo.save).toHaveBeenCalledWith(
         expect.objectContaining({ priority: TicketPriority.CRITICAL, isOverdue: true }),
       );

@@ -12,6 +12,7 @@ import {
   Query,
   Req,
   Res,
+  SerializeOptions,
   StreamableFile,
   UploadedFile,
   UseInterceptors,
@@ -41,8 +42,14 @@ export class TicketsController {
   }
 
   // Literal sub-routes declared before /:ticketId so they are never coerced to int.
+  @Post('escalate-now')
+  escalateNow() {
+    return this.ticketsService.escalateOverdueTickets().then((escalated) => ({ escalated }));
+  }
+
   @Get('deleted')
   @Roles(UserRole.ADMIN)
+  @SerializeOptions({ groups: ['admin'] })
   findDeleted(
     @Query('projectId', new ParseIntPipe({ optional: true })) projectId?: number,
   ) {

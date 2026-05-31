@@ -71,15 +71,51 @@ Use class-validator for input validation. Never return the password field in res
 **Prompt 3:**
 "GET /tickets/:ticketId/dependencies returns the raw dependency entity instead of the blocker tickets. Fix it to return the actual blocker ticket objects: [{id, title, status}] as specified in the README."
 
-# DELETE BEFORE SENDING!!!!
+**Prompt 4:**
+"The update user endpoint (POST /users/update/:userId) should only allow updating fullName and role. Currently it also allows updating email and username. Fix the UpdateUserDto to only accept fullName and role fields, reject everything else."
 
-## Extended Features Spec Prompt
+**Prompt 5:**
+"POST /projects with a non-existent ownerId returns 500 Internal Server Error. Fix projects.service.ts to validate that the ownerId exists before creating the project, and return a 404 with message 'User {id} not found' if it doesn't."
+
+**Prompt 6:**
+"Remove deletedAt from all standard API responses for tickets and projects. It's an internal field and should not be exposed in normal GET responses. Exception: GET /tickets/deleted and GET /projects/deleted (ADMIN only) should still show deletedAt so admins can see when it was deleted."
+
+**Prompt 7:**
+"The PATCH /tickets/:ticketId endpoint allows updating the type field, but the spec says only title, description, status, priority, and assigneeId can be updated. Fix UpdateTicketDto to only allow those fields plus optional version and dueDate."
+
+**Prompt 8:**
+"GET /tickets/deleted is not showing the deletedAt field. The @SerializeOptions({ groups: ['admin'] }) should expose it. Check why deletedAt is still hidden on the findDeleted endpoint and fix it."
+
+**Prompt 9:**
+"Mention matching should be case-insensitive per the spec. Currently @Alice fails with 422 even though user 'alice' exists. Fix the mention parsing to match usernames case-insensitively."
+
+## Fixing Auto Assignment Bug
+**Prompt 1:**
+"Auto-assignment is returning null. The spec doesn't have project membership — auto-assignment should find the DEVELOPER user with the fewest non-DONE tickets assigned to them in the given projectId. Fix the auto-assignment logic in tickets.service.ts to query all DEVELOPER users globally and count their non-DONE tickets in the specific project."
+
+**Prompt 2:**
+"Auto-assignment still returns assigneeId null. Please read the current auto-assignment code in tickets.service.ts and show me exactly what query it uses to find DEVELOPER users. The problem is likely it's querying for users linked to the project somehow, but there's no project membership in this system. It should simply find ALL users with role DEVELOPER, then count their non-DONE tickets where projectId matches, and assign to the one with the lowest count."
+
+**Prompt 3:**
+"Auto-assignment still returns null even with DEVELOPER users in the DB. Add a console.log in the auto-assignment code to debug: log the developers found, the counts, and the selected assignee. Then I'll create a ticket and check the server logs."
+
+**Prompt 4:**
+"Show me the current auto-assignment code in tickets.service.ts with the console.logs — paste the relevant function."
+
+**Prompt 5:**
+"Auto-assignment is implemented as a separate POST /tickets/:ticketId/auto-assign endpoint but the spec says it should happen automatically during ticket creation when assigneeId is not provided. Move the auto-assignment logic to run inside the create() function in tickets.service.ts when dto.assigneeId is absent. The separate auto-assign endpoint can stay but the automatic behavior on creation is what's required."
+
+**Prompt 6:**
+"Auto-assignment is working but it's not logging to the audit log with actor=SYSTEM, action=AUTO_ASSIGN. Add audit log entry in pickLeastLoadedDeveloper or in the create() function after auto-assignment, with action='AUTO_ASSIGN', entityType='Ticket', entityId=ticket.id, actor=SYSTEM, performedBy=null."
+
+## Testing Auto-Scheduling Escalation
 **Prompt:**
-Build the following modules exactly matching these specs:
-1. Ticket Dependencies: POST /tickets/:ticketId/dependencies (body: {blockedBy: number}), GET /tickets/:ticketId/dependencies, DELETE /tickets/:ticketId/dependencies/:blockerId. Both tickets must exist and belong to the same project. A ticket cannot transition to DONE if it has unresolved blockers.
-2. Attachments: POST /tickets/:ticketId/attachments (multipart file upload), DELETE /tickets/:ticketId/attachments/:attachmentId. Max 10MB, allowed types: image/png, image/jpeg, application/pdf, text/plain. Store files locally.
-3. CSV Export: GET /tickets/export?projectId=:id returns CSV with fields: id, title, description, status, priority, type, assigneeId. CSV Import: POST /tickets/import accepts multipart CSV + projectId form field, creates tickets in bulk, returns {created, failed, errors[]}.
-4. Auto-escalation: background cron job (runs every hour), for each overdue ticket (dueDate passed, status != DONE), promote priority one level: LOW→MEDIUM→HIGH→CRITICAL. Set isOverdue=true when CRITICAL. Idempotent.
-5. Auto-assignment: when ticket is created without assigneeId, assign to DEVELOPER with least open tickets in that project. Ties broken by registration order. Log in audit log with actor=SYSTEM, action=AUTO_ASSIGN.
-6. Workload: GET /projects/:projectId/workload returns [{userId, username, openTicketCount}] sorted ascending.
-7. Mentions: GET /users/:userId/mentions returns all comments where user was mentioned, newest first, paginated.
+"Add a test endpoint POST /tickets/escalate-now that manually triggers the escalation job — only for testing purposes. It should run the same logic as the hourly cron."
+
+## Adding more Tests
+**Prompt:**
+"Add more unit tests covering these edge cases: status transition validation (forward only), DONE ticket cannot be updated, dependency blocks DONE transition, mention case-insensitivity, auto-escalation idempotency (CRITICAL ticket not escalated further), auto-assignment with no developers available."
+
+## run.md File Creation
+**Prompt:**
+"Write a run.md file in the project root with exact steps to: 1) install dependencies, 2) start the database with Docker, 3) set up the .env file, 4) run the application, 5) run the tests. Include the exact commands needed."

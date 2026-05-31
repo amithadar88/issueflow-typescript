@@ -1,3 +1,4 @@
+import { Transform } from 'class-transformer';
 import {
   Column,
   DeleteDateColumn,
@@ -72,6 +73,7 @@ export class Ticket {
   @VersionColumn()
   version: number;
 
+  @Transform(({ value, options }) => options?.groups?.includes('admin') ? value : undefined)
   @DeleteDateColumn()
   deletedAt: Date | null;
 }

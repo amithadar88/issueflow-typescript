@@ -7,7 +7,7 @@ import {
   IsString,
   Min,
 } from 'class-validator';
-import { TicketPriority, TicketStatus, TicketType } from '../ticket.entity';
+import { TicketPriority, TicketStatus } from '../ticket.entity';
 
 export class UpdateTicketDto {
   @IsString()
@@ -26,10 +26,6 @@ export class UpdateTicketDto {
   @IsEnum(TicketPriority)
   @IsOptional()
   priority?: TicketPriority;
-
-  @IsEnum(TicketType)
-  @IsOptional()
-  type?: TicketType;
 
   @IsInt()
   @IsOptional()

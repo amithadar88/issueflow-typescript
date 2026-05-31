@@ -10,6 +10,7 @@ import {
   Patch,
   Post,
   Req,
+  SerializeOptions,
 } from '@nestjs/common';
 import { Request } from 'express';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -36,6 +37,7 @@ export class ProjectsController {
   // the string "deleted" as a param and pass it to ParseIntPipe.
   @Get('deleted')
   @Roles(UserRole.ADMIN)
+  @SerializeOptions({ groups: ['admin'] })
   findDeleted() {
     return this.projectsService.findDeleted();
   }

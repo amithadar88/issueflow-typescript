@@ -33,10 +33,10 @@ export interface CommentResponse {
   mentionedUsers: MentionedUser[];
 }
 
-// Extracts unique @username tokens from a content string.
+// Extracts unique @username tokens from a content string, normalised to lowercase.
 function extractMentions(content: string): string[] {
   const raw = content.match(/@([a-zA-Z0-9_]+)/g) ?? [];
-  return [...new Set(raw.map((m) => m.slice(1)))];
+  return [...new Set(raw.map((m) => m.slice(1).toLowerCase()))];
 }
 
 @Injectable()
@@ -144,7 +144,7 @@ export class CommentsService {
       where: { username: In(usernames) },
     });
 
-    const found = new Set(users.map((u) => u.username));
+    const found = new Set(users.map((u) => u.username.toLowerCase()));
     const missing = usernames.filter((u) => !found.has(u));
     if (missing.length > 0) {
       throw new UnprocessableEntityException(
