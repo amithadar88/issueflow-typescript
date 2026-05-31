@@ -146,3 +146,11 @@ Tests were written alongside each module. After manual testing revealed addition
 
 **Prompt 3:**
 "Add unit tests for TicketsService.create() error cases: invalid projectId, assigneeId provided but invalid."
+
+## Code Quality Review
+**Prompt:**
+"Do a code quality review of the entire src/ folder. Check for: 1) any console.log statements left in production code, 2) any TODO comments, 3) any duplicate code that should be extracted, 4) any inconsistent naming conventions, 5) any missing error handling. List everything you find."
+
+## Code Quality Fixes
+**Prompt:**
+"Fix the following code quality issues: 1) Replace console.error in audit-log.service.ts with NestJS Logger. 2) Add null check after reload in comments.service.ts:165 — throw NotFoundException if comment can't be reloaded. 3) Add null guards in projects.service.ts restore() and tickets.service.ts restore() — throw NotFoundException if findOne returns null. 4) In attachments.service.ts remove(), wrap fs.unlinkSync() in try-catch so filesystem errors don't crash after the DB record is already deleted. 5) Extract the duplicate assertTicketExists() into a shared helper or keep it as is if it's simpler."
