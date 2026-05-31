@@ -16,6 +16,7 @@ import {
 import { AuditAction, EntityType } from '../audit-log/audit-log.constants';
 import { AuditActor } from '../audit-log/audit-log.entity';
 import { AuditLogService } from '../audit-log/audit-log.service';
+import { Project } from '../projects/project.entity';
 import { TicketDependenciesService } from '../ticket-dependencies/ticket-dependencies.service';
 import { User, UserRole } from '../users/user.entity';
 import { CreateTicketDto } from './dto/create-ticket.dto';
@@ -52,11 +53,21 @@ export class TicketsService {
     private readonly ticketsRepository: Repository<Ticket>,
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
+    @InjectRepository(Project)
+    private readonly projectsRepository: Repository<Project>,
     private readonly auditLog: AuditLogService,
     private readonly ticketDeps: TicketDependenciesService,
   ) {}
 
   async create(dto: CreateTicketDto, performedBy: number | null = null): Promise<Ticket> {
+    const project = await this.projectsRepository.findOne({ where: { id: dto.projectId } });
+    if (!project) throw new NotFoundException(`Project ${dto.projectId} not found`);
+
+    if (dto.assigneeId != null) {
+      const assignee = await this.usersRepository.findOne({ where: { id: dto.assigneeId } });
+      if (!assignee) throw new NotFoundException(`User ${dto.assigneeId} not found`);
+    }
+
     const ticket = this.ticketsRepository.create(dto);
     ticket.isOverdue = computeIsOverdue(ticket);
 

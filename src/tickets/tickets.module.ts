@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuditLogModule } from '../audit-log/audit-log.module';
+import { Project } from '../projects/project.entity';
 import { TicketDependenciesModule } from '../ticket-dependencies/ticket-dependencies.module';
 import { User } from '../users/user.entity';
 import { Ticket } from './ticket.entity';
@@ -9,7 +10,7 @@ import { TicketsService } from './tickets.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Ticket, User]),
+    TypeOrmModule.forFeature([Ticket, User, Project]),
     AuditLogModule,
     TicketDependenciesModule,
   ],

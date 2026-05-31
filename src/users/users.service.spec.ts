@@ -1,10 +1,14 @@
-import { NotFoundException } from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import * as bcrypt from 'bcrypt';
+import { QueryFailedError } from 'typeorm';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { Comment } from '../comments/comment.entity';
 import { User } from './user.entity';
 import { UsersService } from './users.service';
+
+jest.mock('bcrypt');
 
 // Chainable QueryBuilder stub — every method returns `this` except the terminals.
 function makeQb(result: [Comment[], number]) {
@@ -178,5 +182,170 @@ describe('UsersService — findMentions()', () => {
 
     expect(result.total).toBe(5);
     expect(result.data).toEqual([]);
+  });
+});
+
+describe('UsersService — create()', () => {
+  let service: UsersService;
+  let userRepo: ReturnType<typeof mockUserRepo>;
+  let auditLog: ReturnType<typeof mockAuditLog>;
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        UsersService,
+        { provide: getRepositoryToken(User), useFactory: mockUserRepo },
+        { provide: getRepositoryToken(Comment), useFactory: mockCommentRepo },
+        { provide: AuditLogService, useFactory: mockAuditLog },
+      ],
+    }).compile();
+
+    service = module.get(UsersService);
+    userRepo = module.get(getRepositoryToken(User));
+    auditLog = module.get(AuditLogService);
+  });
+
+  it('hashes the password and logs CREATE on success', async () => {
+    (bcrypt.hash as jest.Mock).mockResolvedValue('hashed-pw');
+    const user = makeUser({ id: 7 });
+    userRepo.create.mockReturnValue(user);
+    userRepo.save.mockResolvedValue(user);
+
+    const result = await service.create(
+      { username: 'alice', email: 'alice@test.com', fullName: 'Alice', password: 'secret', role: 'DEVELOPER' as any },
+      5,
+    );
+
+    expect(result).toBe(user);
+    expect(userRepo.create).toHaveBeenCalledWith(expect.objectContaining({ password: 'hashed-pw' }));
+    expect(auditLog.log).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'CREATE', entityType: 'User', entityId: 7 }),
+    );
+  });
+
+  it('throws ConflictException on duplicate username or email (PG unique violation)', async () => {
+    (bcrypt.hash as jest.Mock).mockResolvedValue('hashed-pw');
+    userRepo.create.mockReturnValue(makeUser());
+
+    const pgError = Object.assign(
+      new QueryFailedError('INSERT', [], new Error('duplicate')),
+      { code: '23505' },
+    );
+    userRepo.save.mockRejectedValue(pgError);
+
+    await expect(
+      service.create({ username: 'alice', email: 'alice@test.com', fullName: 'Alice', password: 'secret', role: 'DEVELOPER' as any }),
+    ).rejects.toThrow(ConflictException);
+  });
+});
+
+describe('UsersService — findOne()', () => {
+  let service: UsersService;
+  let userRepo: ReturnType<typeof mockUserRepo>;
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        UsersService,
+        { provide: getRepositoryToken(User), useFactory: mockUserRepo },
+        { provide: getRepositoryToken(Comment), useFactory: mockCommentRepo },
+        { provide: AuditLogService, useFactory: mockAuditLog },
+      ],
+    }).compile();
+
+    service = module.get(UsersService);
+    userRepo = module.get(getRepositoryToken(User));
+  });
+
+  it('returns the user when found', async () => {
+    const user = makeUser();
+    userRepo.findOne.mockResolvedValue(user);
+
+    await expect(service.findOne(1)).resolves.toBe(user);
+  });
+
+  it('throws NotFoundException when user does not exist', async () => {
+    userRepo.findOne.mockResolvedValue(null);
+
+    await expect(service.findOne(99)).rejects.toThrow(NotFoundException);
+  });
+});
+
+describe('UsersService — update()', () => {
+  let service: UsersService;
+  let userRepo: ReturnType<typeof mockUserRepo>;
+  let auditLog: ReturnType<typeof mockAuditLog>;
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        UsersService,
+        { provide: getRepositoryToken(User), useFactory: mockUserRepo },
+        { provide: getRepositoryToken(Comment), useFactory: mockCommentRepo },
+        { provide: AuditLogService, useFactory: mockAuditLog },
+      ],
+    }).compile();
+
+    service = module.get(UsersService);
+    userRepo = module.get(getRepositoryToken(User));
+    auditLog = module.get(AuditLogService);
+  });
+
+  it('applies the patch and logs UPDATE', async () => {
+    const user = makeUser();
+    userRepo.findOne.mockResolvedValue(user);
+    userRepo.save.mockResolvedValue({ ...user, fullName: 'Alice Updated' });
+
+    const result = await service.update(1, { fullName: 'Alice Updated' }, 5);
+
+    expect(result.fullName).toBe('Alice Updated');
+    expect(auditLog.log).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'UPDATE', entityId: 1 }),
+    );
+  });
+
+  it('throws NotFoundException when user does not exist', async () => {
+    userRepo.findOne.mockResolvedValue(null);
+
+    await expect(service.update(99, { fullName: 'X' }, 1)).rejects.toThrow(NotFoundException);
+  });
+});
+
+describe('UsersService — remove()', () => {
+  let service: UsersService;
+  let userRepo: ReturnType<typeof mockUserRepo>;
+  let auditLog: ReturnType<typeof mockAuditLog>;
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        UsersService,
+        { provide: getRepositoryToken(User), useFactory: mockUserRepo },
+        { provide: getRepositoryToken(Comment), useFactory: mockCommentRepo },
+        { provide: AuditLogService, useFactory: mockAuditLog },
+      ],
+    }).compile();
+
+    service = module.get(UsersService);
+    userRepo = module.get(getRepositoryToken(User));
+    auditLog = module.get(AuditLogService);
+  });
+
+  it('deletes the user and logs DELETE', async () => {
+    userRepo.delete.mockResolvedValue({ affected: 1 });
+
+    await service.remove(1, 5);
+
+    expect(userRepo.delete).toHaveBeenCalledWith(1);
+    expect(auditLog.log).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'DELETE', entityType: 'User', entityId: 1 }),
+    );
+  });
+
+  it('throws NotFoundException when user does not exist', async () => {
+    userRepo.delete.mockResolvedValue({ affected: 0 });
+
+    await expect(service.remove(99, 1)).rejects.toThrow(NotFoundException);
+    expect(auditLog.log).not.toHaveBeenCalled();
   });
 });

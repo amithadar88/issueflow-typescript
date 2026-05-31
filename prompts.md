@@ -129,6 +129,20 @@ Tests were written alongside each module. After manual testing revealed addition
 **Prompt:**
 "Write a run.md file in the project root with exact steps to: 1) install dependencies, 2) start the database with Docker, 3) set up the .env file, 4) run the application, 5) run the tests. Include the exact commands needed."
 
-## Last README check
+## Last README Check
 **Prompt:**
-"Go through every endpoint in README.md and verify it exists in the codebase with the correct HTTP method and path. List any missing or mismatched endpoints."
+"Go through every endpoint in README.md and verify it exists in the codebase with the correct HTTP method and path. Don't change anything yet.List any missing or mismatched endpoints."
+
+## Last Tests Check
+**Prompt:**
+"Go through every endpoint in the codebase and tell me which ones have unit tests covering happy path and error cases, and which ones are missing tests. Give me a summary table."
+
+## Add Tests
+**Prompt 1:**
+"Add unit tests for the following service methods that currently have no tests: AuthService (login happy path, wrong password, non-existent user), ProjectsService (create, findOne 404, update, softDelete, restore), TicketDependenciesService (addDependency, getDependencies, removeDependency, same-project validation, blocks DONE transition). Follow the same mock pattern used in the existing spec files."
+
+**Prompt 2:**
+"Add unit tests for UsersService: create (happy path + duplicate username 409), findOne (found + 404), update (happy path + 404), remove (happy path + 404)."
+
+**Prompt 3:**
+"Add unit tests for TicketsService.create() error cases: invalid projectId, assigneeId provided but invalid."

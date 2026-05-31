@@ -6,6 +6,7 @@ import {
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { AuditLogService } from '../audit-log/audit-log.service';
+import { Project } from '../projects/project.entity';
 import { TicketDependenciesService } from '../ticket-dependencies/ticket-dependencies.service';
 import { User, UserRole } from '../users/user.entity';
 import { Ticket, TicketPriority, TicketStatus, TicketType } from './ticket.entity';
@@ -40,6 +41,8 @@ const mockUserRepo = () => ({
   findOne: jest.fn(),
 });
 
+const mockProjectRepo = () => ({ findOne: jest.fn() });
+
 const mockAuditLog = () => ({ log: jest.fn() });
 
 const mockTicketDeps = () => ({
@@ -70,6 +73,7 @@ describe('TicketsService', () => {
   let service: TicketsService;
   let ticketRepo: ReturnType<typeof mockTicketRepo>;
   let userRepo: ReturnType<typeof mockUserRepo>;
+  let projectRepo: ReturnType<typeof mockProjectRepo>;
   let auditLog: ReturnType<typeof mockAuditLog>;
   let ticketDeps: ReturnType<typeof mockTicketDeps>;
 
@@ -79,6 +83,7 @@ describe('TicketsService', () => {
         TicketsService,
         { provide: getRepositoryToken(Ticket), useFactory: mockTicketRepo },
         { provide: getRepositoryToken(User), useFactory: mockUserRepo },
+        { provide: getRepositoryToken(Project), useFactory: mockProjectRepo },
         { provide: AuditLogService, useFactory: mockAuditLog },
         { provide: TicketDependenciesService, useFactory: mockTicketDeps },
       ],
@@ -87,12 +92,14 @@ describe('TicketsService', () => {
     service = module.get(TicketsService);
     ticketRepo = module.get(getRepositoryToken(Ticket));
     userRepo = module.get(getRepositoryToken(User));
+    projectRepo = module.get(getRepositoryToken(Project));
     auditLog = module.get(AuditLogService);
     ticketDeps = module.get(TicketDependenciesService);
   });
 
   describe('create()', () => {
     it('creates a ticket without an assignee when no developers are available', async () => {
+      projectRepo.findOne.mockResolvedValue({ id: 1 });
       const ticket = makeTicket({ assigneeId: null });
       ticketRepo.create.mockReturnValue(ticket);
       ticketRepo.save.mockResolvedValue(ticket);
@@ -109,6 +116,25 @@ describe('TicketsService', () => {
       expect(auditLog.log).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'CREATE' }),
       );
+    });
+
+    it('throws NotFoundException when projectId does not exist', async () => {
+      projectRepo.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.create({ title: 'Fix bug', priority: TicketPriority.MEDIUM, type: TicketType.BUG, projectId: 99 }),
+      ).rejects.toThrow(NotFoundException);
+      expect(ticketRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('throws NotFoundException when assigneeId is provided but does not exist', async () => {
+      projectRepo.findOne.mockResolvedValue({ id: 1 });
+      userRepo.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.create({ title: 'Fix bug', priority: TicketPriority.MEDIUM, type: TicketType.BUG, projectId: 1, assigneeId: 99 }),
+      ).rejects.toThrow(NotFoundException);
+      expect(ticketRepo.create).not.toHaveBeenCalled();
     });
   });
 
@@ -331,6 +357,7 @@ describe('TicketsService', () => {
           'Fix login,,TODO,HIGH,BUG,\n',
       );
 
+      projectRepo.findOne.mockResolvedValue({ id: 5 });
       ticketRepo.create.mockImplementation((d) => d as Ticket);
       ticketRepo.save.mockResolvedValue(makeTicket({ title: 'Fix login' }));
       userRepo.find.mockResolvedValue([]); // no developers → auto-assignment skipped
@@ -353,6 +380,7 @@ describe('TicketsService', () => {
           'Good ticket,,TODO,HIGH,BUG,\n',
       );
 
+      projectRepo.findOne.mockResolvedValue({ id: 1 });
       ticketRepo.create.mockImplementation((d) => d as Ticket);
       ticketRepo.save.mockResolvedValue(makeTicket({ title: 'Good ticket' }));
       userRepo.find.mockResolvedValue([]); // no developers → auto-assignment skipped
