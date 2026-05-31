@@ -44,7 +44,7 @@ Use class-validator for input validation. Never return the password field in res
 
 ## Memory Update / Remaining Modules (new chat session)
 **Prompt:**
-"I'm building IssueFlow NestJS backend. The following modules are already built and working: Users, Auth (JWT), Projects (with soft delete), Tickets (with soft delete, status transitions, optimistic locking), Comments (with @mentions). The Audit Log module was partially built but got stuck. Please read the current src/ folder, fix any compilation errors, then continue building: Audit Log (GET /audit-logs with filters, log all state changes in other services), Ticket Dependencies, Attachments, CSV Export/Import, Auto-escalation scheduler, Auto-assignment, Workload endpoint, and Tests."
+"I'm building IssueFlow NestJS backend. The following modules are already built and working: Users, Auth (JWT), Projects (with soft delete), Tickets (with soft delete, status transitions, optimistic locking), Comments (with @mentions). The Audit Log module was partially built but got stuck. Please read the current src/ folder, fix any compilation errors, then continue building: Audit Log (GET /audit-logs with filters, log all state changes in other services), Ticket Dependencies (POST /tickets/:ticketId/dependencies with body {blockedBy}, GET /tickets/:ticketId/dependencies, DELETE /tickets/:ticketId/dependencies/:blockerId — both tickets must be in same project, cycle detection, ticket cannot transition to DONE if unresolved blockers exist), Attachments (10MB limit, allowed types: png/jpeg/pdf/txt), CSV Export/Import, Auto-escalation scheduler, Auto-assignment, Workload endpoint, and Tests."
 
 ## Verification Check
 **Prompt 1:**
@@ -56,12 +56,17 @@ Use class-validator for input validation. Never return the password field in res
 **Prompt 3:**
 "Run the full test suite with npm run test and also add a test for the new GET /users/:userId/mentions endpoint in users.service.spec.ts."
 
-**Prompt 4:**
+## Spec Verification & Fixes
+After Claude Code built the extended features, I ran a verification check and it identified several mismatches between the implementation and the spec (wrong field names, missing validations, wrong endpoint paths). I then sent:
+
+**Prompt:**
 "Fix all of these to match the spec exactly."
 
 **Result:** 41/41 tests passing after fixes.
 
 ## Fixing Bugs
+During manual testing with Postman, I discovered several bugs and fixed them one by one:
+
 **Prompt 1:**
 "POST /projects is rejecting ownerId with 'property should not exist'. Fix the CreateProjectDto to accept ownerId as a required number field."
 
@@ -90,6 +95,8 @@ Use class-validator for input validation. Never return the password field in res
 "Mention matching should be case-insensitive per the spec. Currently @Alice fails with 422 even though user 'alice' exists. Fix the mention parsing to match usernames case-insensitively."
 
 ## Fixing Auto Assignment Bug
+After testing auto-assignment, I noticed tickets were always created with assigneeId null despite DEVELOPER users existing. I debugged it step by step:
+
 **Prompt 1:**
 "Auto-assignment is returning null. The spec doesn't have project membership — auto-assignment should find the DEVELOPER user with the fewest non-DONE tickets assigned to them in the given projectId. Fix the auto-assignment logic in tickets.service.ts to query all DEVELOPER users globally and count their non-DONE tickets in the specific project."
 
@@ -113,9 +120,15 @@ Use class-validator for input validation. Never return the password field in res
 "Add a test endpoint POST /tickets/escalate-now that manually triggers the escalation job — only for testing purposes. It should run the same logic as the hourly cron."
 
 ## Adding more Tests
+Tests were written alongside each module. After manual testing revealed additional edge cases, I added:
+
 **Prompt:**
 "Add more unit tests covering these edge cases: status transition validation (forward only), DONE ticket cannot be updated, dependency blocks DONE transition, mention case-insensitivity, auto-escalation idempotency (CRITICAL ticket not escalated further), auto-assignment with no developers available."
 
 ## run.md File Creation
 **Prompt:**
 "Write a run.md file in the project root with exact steps to: 1) install dependencies, 2) start the database with Docker, 3) set up the .env file, 4) run the application, 5) run the tests. Include the exact commands needed."
+
+## Last README check
+**Prompt:**
+"Go through every endpoint in README.md and verify it exists in the codebase with the correct HTTP method and path. List any missing or mismatched endpoints."
