@@ -162,6 +162,7 @@ export class CommentsService {
       where: { id },
       relations: { mentionedUsers: true },
     });
+    if (!comment) throw new NotFoundException(`Comment ${id} not found`);
     return this.toResponse(comment);
   }
 

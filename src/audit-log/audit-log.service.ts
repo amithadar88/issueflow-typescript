@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AuditActor, AuditLog } from './audit-log.entity';
@@ -14,6 +14,8 @@ export interface LogPayload {
 
 @Injectable()
 export class AuditLogService {
+  private readonly logger = new Logger(AuditLogService.name);
+
   constructor(
     @InjectRepository(AuditLog)
     private readonly repo: Repository<AuditLog>,
@@ -34,7 +36,7 @@ export class AuditLogService {
     });
 
     this.repo.save(entry).catch((err) =>
-      console.error('[AuditLog] failed to persist entry', err),
+      this.logger.error('[AuditLog] failed to persist entry', err),
     );
   }
 

@@ -71,6 +71,8 @@ export class ProjectsService {
     }
     await this.projectsRepository.restore(id);
     this.auditLog.log({ action: AuditAction.RESTORE, entityType: EntityType.PROJECT, entityId: id, performedBy });
-    return this.projectsRepository.findOne({ where: { id } });
+    const restored = await this.projectsRepository.findOne({ where: { id } });
+    if (!restored) throw new NotFoundException(`Project ${id} not found after restore`);
+    return restored;
   }
 }

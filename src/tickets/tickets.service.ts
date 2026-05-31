@@ -174,7 +174,9 @@ export class TicketsService {
     if (!ticket) throw new NotFoundException(`Ticket ${id} not found`);
     await this.ticketsRepository.restore(id);
     this.auditLog.log({ action: AuditAction.RESTORE, entityType: EntityType.TICKET, entityId: id, performedBy });
-    return this.ticketsRepository.findOne({ where: { id } });
+    const restored = await this.ticketsRepository.findOne({ where: { id } });
+    if (!restored) throw new NotFoundException(`Ticket ${id} not found after restore`);
+    return restored;
   }
 
   // ── Auto-assignment ────────────────────────────────────────────────────────

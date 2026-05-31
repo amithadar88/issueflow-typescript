@@ -67,7 +67,12 @@ export class AttachmentsService {
     await this.repo.remove(attachment);
 
     if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
+      try {
+        fs.unlinkSync(filePath);
+      } catch {
+        // File deletion failure is non-fatal: the DB record is already removed.
+        // The orphaned file can be cleaned up by a maintenance sweep.
+      }
     }
   }
 
